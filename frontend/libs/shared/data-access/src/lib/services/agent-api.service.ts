@@ -89,13 +89,15 @@ export class AgentApiService {
 
   /**
    * Dispatches a prompt to the Semantic Kernel agent orchestrator via the real-time SignalR hub.
+   * Returns the final response directly from the hub invocation.
    *
    * @param prompt The natural language inquiry
    */
-  async sendPrompt(prompt: string): Promise<void> {
+  async sendPrompt(prompt: string): Promise<string> {
     await this.startConnection();
     if (this.hubConnection && this.hubConnection.state === 'Connected') {
-      await this.hubConnection.invoke('SendPrompt', prompt);
+      const response = await this.hubConnection.invoke<string>('SendPrompt', prompt);
+      return response;
     } else {
       throw new Error('Real-time connection to AgentHub is currently offline.');
     }
@@ -111,15 +113,9 @@ export class AgentApiService {
   sendMessage(prompt: string): Observable<AgentChatResponse> {
     return new Observable<AgentChatResponse>((observer) => {
       this.sendPrompt(prompt)
-        .then(() => {
-          const subscription = this.finalResponse$.subscribe({
-            next: (resp) => {
-              observer.next({ response: resp });
-              observer.complete();
-              subscription.unsubscribe();
-            },
-            error: (err) => observer.error(err),
-          });
+        .then((response) => {
+          observer.next({ response });
+          observer.complete();
         })
         .catch((hubErr) => {
           console.warn('Hub dispatch failed, falling back to HTTP POST /api/agent/chat...', hubErr);
