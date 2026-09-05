@@ -19,6 +19,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
     private readonly InvoiceAgentPlugin _invoicePlugin;
     private readonly InventoryAgentPlugin _inventoryPlugin;
     private readonly InvoiceExtractorPlugin? _invoiceExtractorPlugin;
+    private readonly ReportingAgentPlugin? _reportingPlugin;
     private readonly IHubContext<AgentHub>? _hubContext;
 
     public SemanticKernelAgentOrchestrator(
@@ -27,7 +28,8 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         InvoiceAgentPlugin invoicePlugin,
         InventoryAgentPlugin inventoryPlugin,
         IHubContext<AgentHub>? hubContext = null,
-        InvoiceExtractorPlugin? invoiceExtractorPlugin = null)
+        InvoiceExtractorPlugin? invoiceExtractorPlugin = null,
+        ReportingAgentPlugin? reportingPlugin = null)
     {
         _configuration = configuration;
         _logger = logger;
@@ -35,6 +37,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         _inventoryPlugin = inventoryPlugin;
         _hubContext = hubContext;
         _invoiceExtractorPlugin = invoiceExtractorPlugin;
+        _reportingPlugin = reportingPlugin;
     }
 
     public async Task<string> ExecutePromptAsync(string prompt, CancellationToken cancellationToken = default)
@@ -53,12 +56,16 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
 
         var kernelBuilder = Kernel.CreateBuilder();
 
-        // Register domain plugins
+        // Register domain plugins into Semantic Kernel
         kernelBuilder.Plugins.AddFromObject(_inventoryPlugin, "InventoryAgentPlugin");
         kernelBuilder.Plugins.AddFromObject(_invoicePlugin, "InvoiceAgentPlugin");
         if (_invoiceExtractorPlugin != null)
         {
             kernelBuilder.Plugins.AddFromObject(_invoiceExtractorPlugin, "InvoiceExtractorPlugin");
+        }
+        if (_reportingPlugin != null)
+        {
+            kernelBuilder.Plugins.AddFromObject(_reportingPlugin, "ReportingAgentPlugin");
         }
 
         var openAiKey = _configuration["SemanticKernel:ApiKey"] ?? _configuration["OpenAI:ApiKey"];
@@ -106,8 +113,57 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         string responseText;
         string actionResult;
 
-        // 1. Check for Invoice Extraction or Staging prompt
-        if (_invoiceExtractorPlugin != null && (promptLower.Contains("extract") || promptLower.Contains("parse") || promptLower.Contains("stage")) &&
+        // 1. Check for Inventory Valuation & Executive Asset Summary
+        if (_reportingPlugin != null && (promptLower.Contains("valuation") || promptLower.Contains("inventory value") || promptLower.Contains("stock value") || promptLower.Contains("asset value") || promptLower.Contains("value of our warehouse") || promptLower.Contains("value of our inventory") || promptLower.Contains("value of inventory")))
+        {
+            await StreamThoughtAsync("Aggregating active inventory holding values via ReportingAgentPlugin.GetInventoryValuationAsync...", cancellationToken);
+            actionResult = await _reportingPlugin.GetInventoryValuationAsync(cancellationToken);
+
+            executedActions.Add(new AgentActionExecutedDto(
+                PluginName: "ReportingAgentPlugin",
+                FunctionName: "GetInventoryValuationAsync",
+                ArgumentsJson: "{}",
+                ResultJson: actionResult
+            ));
+
+            using var doc = JsonDocument.Parse(actionResult);
+            var totalValuation = doc.RootElement.GetProperty("TotalValuation").GetDecimal();
+            var activeCount = doc.RootElement.GetProperty("TotalActiveSkuCount").GetInt32();
+            var totalUnits = doc.RootElement.GetProperty("TotalUnitsInStock").GetInt32();
+
+            await StreamThoughtAsync($"Calculated warehouse valuation: ${totalValuation:N2} across {activeCount} active SKUs ({totalUnits} total units).", cancellationToken);
+            responseText = $"[Executive Valuation Report]\nTotal active inventory valuation: ${totalValuation:N2} ({totalUnits} total units across {activeCount} SKUs).\nDetails:\n{actionResult}";
+        }
+        // 2. Check for Financial Summary / Revenue / Periodic Performance
+        else if (_reportingPlugin != null && (promptLower.Contains("financial summary") || promptLower.Contains("summary of our financials") || (promptLower.Contains("financial") && promptLower.Contains("summary")) || (promptLower.Contains("revenue") && (promptLower.Contains("summary") || promptLower.Contains("total") || promptLower.Contains("report")))))
+        {
+            int days = 30;
+            var daysMatch = Regex.Match(promptText, @"(?i)(?:last|past|in)\s+(\d+)\s+days?");
+            if (daysMatch.Success && int.TryParse(daysMatch.Groups[1].Value, out var parsedDays))
+            {
+                days = parsedDays;
+            }
+
+            await StreamThoughtAsync($"Aggregating revenue and invoicing volume over the past {days} days via ReportingAgentPlugin.GetFinancialSummaryAsync...", cancellationToken);
+            actionResult = await _reportingPlugin.GetFinancialSummaryAsync(days, cancellationToken);
+
+            executedActions.Add(new AgentActionExecutedDto(
+                PluginName: "ReportingAgentPlugin",
+                FunctionName: "GetFinancialSummaryAsync",
+                ArgumentsJson: JsonSerializer.Serialize(new { days }),
+                ResultJson: actionResult
+            ));
+
+            using var doc = JsonDocument.Parse(actionResult);
+            var totalRev = doc.RootElement.GetProperty("TotalRevenue").GetDecimal();
+            var count = doc.RootElement.GetProperty("InvoiceCount").GetInt32();
+            var currency = doc.RootElement.GetProperty("Currency").GetString();
+
+            await StreamThoughtAsync($"Retrieved financial summary: {count} invoices issued with total revenue of {currency} ${totalRev:N2}.", cancellationToken);
+            responseText = $"[Executive Financial Summary ({days} Days)]\nTotal Revenue: {currency} ${totalRev:N2} across {count} issued invoices.\nDetails:\n{actionResult}";
+        }
+        // 3. Check for Invoice Extraction or Staging prompt
+        else if (_invoiceExtractorPlugin != null && (promptLower.Contains("extract") || promptLower.Contains("parse") || promptLower.Contains("stage")) &&
             (promptLower.Contains("invoice") || promptLower.Contains("receipt") || promptLower.Contains("bill") || promptLower.Contains("items:")))
         {
             await StreamThoughtAsync("Parsing document text and extracting invoice line items via InvoiceExtractorPlugin...", cancellationToken);
@@ -149,7 +205,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
                 responseText = $"[Smart ERP Agent]\nExtracted invoice data:\n{correlatedJson}";
             }
         }
-        // 2. Check if inquiring about stock for a SKU
+        // 4. Check if inquiring about stock for a SKU
         else if (Regex.IsMatch(promptText, @"(?i)(?:stock\s+(?:level\s+)?(?:for|of)?\s+|sku[:\s-]+)([A-Za-z0-9_-]+)") ||
                  (Regex.IsMatch(promptText, @"(?i)\b([A-Z0-9]+-[A-Z0-9]+)\b") && (promptLower.Contains("stock") || promptLower.Contains("quantity") || promptLower.Contains("have enough"))))
         {
@@ -216,7 +272,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         {
             await StreamThoughtAsync("Readying Semantic Kernel plugin execution response...", cancellationToken);
             responseText = $"[Smart ERP Agent Ready]\nReceived prompt: '{request.Prompt}'. " +
-                           "Semantic Kernel orchestration is initialized with InventoryAgentPlugin, InvoiceAgentPlugin, and InvoiceExtractorPlugin. " +
+                           "Semantic Kernel orchestration is initialized with InventoryAgentPlugin, InvoiceAgentPlugin, InvoiceExtractorPlugin, and ReportingAgentPlugin. " +
                            "Configure 'OpenAI:ApiKey' or 'SemanticKernel:ApiKey' for dynamic generative reasoning.";
         }
 
