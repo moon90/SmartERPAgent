@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReportingAgentPlugin",
+  "description": "Microsoft Semantic Kernel Native Plugin for Executive Business Intelligence and Financial Reporting.",
+  "functions": [
+    {
+      "name": "GetInventoryValuationAsync",
+      "description": "Calculates the total monetary holding value of all active inventory items (StockQuantity * UnitPrice) and identifies the top 3 most valuable SKUs for the current tenant organization.",
+      "parameters": [],
+      "returns": {
+        "type": "string",
+        "format": "json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "TotalValuation": { "type": "number" },
+            "TotalActiveSkuCount": { "type": "integer" },
+            "TotalUnitsInStock": { "type": "integer" },
+            "TopValuableSkus": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "SKU": { "type": "string" },
+                  "Name": { "type": "string" },
+                  "StockQuantity": { "type": "integer" },
+                  "UnitPrice": { "type": "number" },
+                  "TotalItemValue": { "type": "number" }
+                },
+                "required": ["SKU", "Name", "StockQuantity", "UnitPrice", "TotalItemValue"]
+              }
+            }
+          },
+          "required": ["TotalValuation", "TotalActiveSkuCount", "TotalUnitsInStock", "TopValuableSkus"]
+        }
+      }
+    },
+    {
+      "name": "GetFinancialSummaryAsync",
+      "description": "Calculates total invoice revenue, invoice count, and currency breakdown issued within a specific number of past calendar days (e.g. 30, 60, 90). Defaults to 30 days if not specified.",
+      "parameters": [
+        {
+          "name": "days",
+          "description": "Number of past calendar days to evaluate (e.g., 7, 30, 60, 90). Defaults to 30 if not specified.",
+          "type": "integer",
+          "default": 30
+        }
+      ],
+      "returns": {
+        "type": "string",
+        "format": "json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "PeriodDays": { "type": "integer" },
+            "StartDateUtc": { "type": "string", "format": "date-time" },
+            "EndDateUtc": { "type": "string", "format": "date-time" },
+            "TotalRevenue": { "type": "number" },
+            "InvoiceCount": { "type": "integer" },
+            "Currency": { "type": "string" }
+          },
+          "required": ["PeriodDays", "StartDateUtc", "EndDateUtc", "TotalRevenue", "InvoiceCount", "Currency"]
+        }
+      }
+    }
+  ]
+}
