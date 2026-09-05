@@ -10,8 +10,8 @@
 
 **Purpose**: Initialize extraction DTOs and DI wiring
 
-- [ ] T001 Create extraction DTO file in `backend/src/SmartErpAgent.Application/DTOs/InvoiceExtractionDto.cs`
-- [ ] T002 [P] Register `InvoiceExtractorPlugin` in DI container in `backend/src/SmartErpAgent.AgentEngine/DependencyInjection.cs`
+- [X] T001 Create extraction DTO file in `backend/src/SmartErpAgent.Application/DTOs/InvoiceExtractionDto.cs`
+- [X] T002 [P] Register `InvoiceExtractorPlugin` in DI container in `backend/src/SmartErpAgent.AgentEngine/DependencyInjection.cs`
 
 ---
 
@@ -21,8 +21,8 @@
 
 **⚠️ CRITICAL**: Must complete before any user story can be implemented
 
-- [ ] T003 Implement `ExtractedInvoiceData` and `ExtractedInvoiceLineItem` classes in `backend/src/SmartErpAgent.Application/DTOs/InvoiceExtractionDto.cs`
-- [ ] T004 Create `InvoiceExtractorPlugin` class skeleton with `IApplicationDbContext` injection in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
+- [X] T003 Implement `ExtractedInvoiceData` and `ExtractedInvoiceLineItem` classes in `backend/src/SmartErpAgent.Application/DTOs/InvoiceExtractionDto.cs`
+- [X] T004 Create `InvoiceExtractorPlugin` class skeleton with `IApplicationDbContext` injection in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
 
 **Checkpoint**: Core extraction models and plugin skeleton ready - user story implementation can begin.
 
@@ -36,9 +36,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Implement `ExtractInvoiceFromTextAsync` regex and heuristic text parsing engine in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
-- [ ] T006 [P] [US1] Add unit tests for text parsing and line item extraction in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
-- [ ] T007 [US1] Register `InvoiceExtractorPlugin` in `SemanticKernelAgentOrchestrator` constructor and plugin collection in `backend/src/SmartErpAgent.AgentEngine/Services/SemanticKernelAgentOrchestrator.cs`
+- [X] T005 [US1] Implement `ExtractInvoiceFromTextAsync` regex and heuristic text parsing engine in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
+- [X] T006 [P] [US1] Add unit tests for text parsing and line item extraction in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
+- [X] T007 [US1] Register `InvoiceExtractorPlugin` in `SemanticKernelAgentOrchestrator` constructor and plugin collection in `backend/src/SmartErpAgent.AgentEngine/Services/SemanticKernelAgentOrchestrator.cs`
 
 **Checkpoint**: Text parsing and line item extraction functional and independently tested (MVP ready).
 
@@ -52,8 +52,8 @@
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Implement `CorrelateWithInventoryCatalogAsync` with exact SKU and product name matching in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
-- [ ] T009 [P] [US2] Add unit tests for SKU correlation and tenant isolation in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
+- [X] T008 [US2] Implement `CorrelateWithInventoryCatalogAsync` with exact SKU and product name matching in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
+- [X] T009 [P] [US2] Add unit tests for SKU correlation and tenant isolation in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
 
 **Checkpoint**: Catalog correlation and multi-tenant inventory validation functional.
 
@@ -67,9 +67,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T010 [US3] Implement `StageExtractedInvoiceAsync` creating `Invoice` and `InvoiceLineItems` entities in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
-- [ ] T011 [P] [US3] Add unit tests for draft invoice staging and line item persistence in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
-- [ ] T012 [US3] Add intermediate thought process streaming via `ReceiveThoughtProcess` during extraction, correlation, and staging in `backend/src/SmartErpAgent.AgentEngine/Services/SemanticKernelAgentOrchestrator.cs`
+- [X] T010 [US3] Implement `StageExtractedInvoiceAsync` creating `Invoice` and `InvoiceLineItems` entities in `backend/src/SmartErpAgent.AgentEngine/Plugins/InvoiceExtractorPlugin.cs`
+- [X] T011 [P] [US3] Add unit tests for draft invoice staging and line item persistence in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
+- [X] T012 [US3] Add intermediate thought process streaming via `ReceiveThoughtProcess` during extraction, correlation, and staging in `backend/src/SmartErpAgent.AgentEngine/Services/SemanticKernelAgentOrchestrator.cs`
 
 **Checkpoint**: End-to-end extraction and draft invoice persistence in ERP database validated.
 
@@ -79,8 +79,8 @@
 
 **Purpose**: DI container verification and full test suite execution
 
-- [ ] T013 [P] Verify DI resolution of `InvoiceExtractorPlugin` from service container in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
-- [ ] T014 Execute full backend test suite (`dotnet test backend/SmartErpAgent.sln`) and quickstart validation per `specs/006-invoice-extractor-plugin/quickstart.md`
+- [X] T013 [P] Verify DI resolution of `InvoiceExtractorPlugin` from service container in `backend/tests/SmartErpAgent.UnitTests/InvoiceExtractorTests.cs`
+- [X] T014 Execute full backend test suite (`dotnet test backend/SmartErpAgent.sln`) and quickstart validation per `specs/006-invoice-extractor-plugin/quickstart.md`
 
 ---
 
