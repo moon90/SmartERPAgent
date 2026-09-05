@@ -4,6 +4,7 @@ using SmartErpAgent.AgentEngine;
 using SmartErpAgent.Api.Hubs;
 using SmartErpAgent.Api.Middlewares;
 using SmartErpAgent.Infrastructure;
+using SmartErpAgent.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,6 +94,35 @@ app.MapGet("/health", () => Results.Ok(new
     Service = "Smart ERP Agent Web API",
     Version = "1.0.0"
 }));
+
+// Database Seeder endpoint
+app.MapPost("/api/database/seed", async (ApplicationDbContext dbContext, ILogger<Program> logger, CancellationToken cancellationToken) =>
+{
+    var result = await DatabaseSeeder.SeedAsync(dbContext, logger, cancellationToken);
+    return Results.Ok(new
+    {
+        Message = "Database seeding processed successfully.",
+        result.TenantsAdded,
+        result.InventoryItemsAdded,
+        result.InvoicesAdded
+    });
+}).WithTags("Database").WithSummary("Seeds demo tenants (ACME_CORP, GLOBAL_LOGISTICS, BIOTECH_MED) and sample inventory/invoices.");
+
+// Seed database demo tenants, inventory SKUs, and invoices on startup in Development or if --seed flag is passed
+if (app.Environment.IsDevelopment() || args.Contains("--seed"))
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        await DatabaseSeeder.SeedAsync(dbContext, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred during database seeding on startup.");
+    }
+}
 
 app.MapControllers();
 app.MapHub<AgentHub>("/hubs/agent");
