@@ -1,3 +1,4 @@
+export * from './lib/config/api.config';
 export * from './lib/models/tenant.model';
 export * from './lib/models/invoice.model';
 export * from './lib/models/inventory.model';

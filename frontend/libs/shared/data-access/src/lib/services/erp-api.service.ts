@@ -4,12 +4,13 @@ import { Observable } from 'rxjs';
 import { Invoice, CreateInvoiceRequest } from '../models/invoice.model';
 import { InventoryItem, CreateInventoryItemRequest, UpdateStockRequest } from '../models/inventory.model';
 import { AgentPromptRequest, AgentResponse } from '../models/agent.model';
+import { API_BASE_URL } from '../config/api.config';
 
 @Injectable({
   providedIn: 'root',
 })
 export class ErpApiService {
-  private readonly baseUrl = 'http://localhost:5000/api';
+  private readonly baseUrl = `${API_BASE_URL}/api`;
 
   constructor(private readonly http: HttpClient) {}
 

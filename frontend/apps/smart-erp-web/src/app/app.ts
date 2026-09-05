@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import {
@@ -35,15 +35,25 @@ export class App implements OnInit {
 
   readonly InvoiceStatus = InvoiceStatus;
 
+  constructor() {
+    // Automatically reload data whenever the user switches tenant in the header dropdown
+    effect(() => {
+      const tenantId = this.tenantService.currentTenantId();
+      if (tenantId) {
+        this.refreshData();
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.tenantService.loadTenants().subscribe({
       next: (tenants) => {
-        if (tenants.length > 0) {
-          this.refreshData();
+        if (tenants.length > 0 && !this.tenantService.currentTenant()) {
+          this.tenantService.setTenant(tenants[0]);
         }
       },
-      error: () => {
-        // Fallback demo data if API is starting
+      error: (err) => {
+        console.error('Failed to load tenants from backend API:', err);
       }
     });
   }

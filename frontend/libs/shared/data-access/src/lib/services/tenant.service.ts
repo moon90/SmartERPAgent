@@ -2,12 +2,13 @@ import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { Tenant, CreateTenantRequest } from '../models/tenant.model';
+import { API_BASE_URL } from '../config/api.config';
 
 @Injectable({
   providedIn: 'root',
 })
 export class TenantService {
-  private readonly apiUrl = 'http://localhost:5000/api/tenants';
+  private readonly apiUrl = `${API_BASE_URL}/api/tenants`;
 
   // Reactive state signals
   readonly tenants = signal<readonly Tenant[]>([]);

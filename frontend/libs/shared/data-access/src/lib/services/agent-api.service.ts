@@ -4,6 +4,8 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { AgentChatResponse } from '../models/agent.model';
+import { API_BASE_URL } from '../config/api.config';
+import { TenantService } from './tenant.service';
 
 export type SignalRConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 
@@ -13,8 +15,10 @@ export type SignalRConnectionStatus = 'connected' | 'connecting' | 'reconnecting
 export class AgentApiService {
   private readonly http = inject(HttpClient);
   private readonly platformId = inject(PLATFORM_ID);
-  private readonly apiUrl = '/api/agent/chat';
-  private readonly hubUrl = '/hubs/agent';
+  private readonly tenantService = inject(TenantService);
+
+  private readonly apiUrl = `${API_BASE_URL}/api/agent/chat`;
+  private readonly hubUrl = `${API_BASE_URL}/hubs/agent`;
 
   private hubConnection: HubConnection | null = null;
 
@@ -39,9 +43,12 @@ export class AgentApiService {
       return;
     }
 
+    const tenantId = this.tenantService.currentTenantId();
+    const targetUrl = tenantId ? `${this.hubUrl}?tenantId=${tenantId}` : this.hubUrl;
+
     if (!this.hubConnection) {
       this.hubConnection = new HubConnectionBuilder()
-        .withUrl(this.hubUrl)
+        .withUrl(targetUrl)
         .withAutomaticReconnect([0, 2000, 5000, 10000])
         .configureLogging(LogLevel.Information)
         .build();
