@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartErpAgent.AgentEngine/SmartErpAgent.AgentEngine.csproj" />
+    <Project Path="src/SmartErpAgent.Api/SmartErpAgent.Api.csproj" />
+    <Project Path="src/SmartErpAgent.Application/SmartErpAgent.Application.csproj" />
+    <Project Path="src/SmartErpAgent.Core/SmartErpAgent.Core.csproj" />
+    <Project Path="src/SmartErpAgent.Infrastructure/SmartErpAgent.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartErpAgent.UnitTests/SmartErpAgent.UnitTests.csproj" />
+  </Folder>
+</Solution>

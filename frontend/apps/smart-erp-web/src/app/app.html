@@ -1,0 +1,189 @@
+<div class="erp-layout">
+  <!-- Navigation Header -->
+  <header class="erp-navbar">
+    <div class="nav-brand">
+      <div class="brand-symbol">
+        <span>⚡</span>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">SMART ERP AGENT</span>
+        <span class="brand-tag">B2B SaaS Multi-Agent Engine</span>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <!-- Shared Workspace Tenant Selector Component -->
+      <smart-erp-tenant-selector />
+
+      <div class="spec-status-badge">
+        <span class="dot"></span>
+        <span>Spec Kit Strict Mode</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <div class="erp-main-grid">
+    <!-- Left / Primary ERP Workspace -->
+    <main class="erp-workspace">
+      <!-- Hero Metric Header -->
+      <section class="workspace-header">
+        <div>
+          <h2>Autonomous Enterprise Dashboard</h2>
+          <p class="subtitle">
+            Tenant-isolated ledger, inventory threshold monitors, and Semantic Kernel automation pipeline.
+          </p>
+        </div>
+
+        <div class="tab-controls">
+          <button
+            type="button"
+            class="tab-button"
+            [class.active]="activeTab() === 'invoices'"
+            (click)="setTab('invoices')"
+          >
+            Invoices & Receivables
+          </button>
+          <button
+            type="button"
+            class="tab-button"
+            [class.active]="activeTab() === 'inventory'"
+            (click)="setTab('inventory')"
+          >
+            Inventory & Supply Chain
+          </button>
+        </div>
+      </section>
+
+      <!-- Tab Content: Invoices -->
+      @if (activeTab() === 'invoices') {
+        <section class="card data-card">
+          <div class="card-header">
+            <div>
+              <h3>Invoices Ledger</h3>
+              <span class="card-caption">Strictly isolated by TenantId query filter</span>
+            </div>
+            <button class="secondary-btn" (click)="refreshData()">Refresh</button>
+          </div>
+
+          <div class="table-container">
+            <table class="erp-table">
+              <thead>
+                <tr>
+                  <th>INVOICE #</th>
+                  <th>CUSTOMER</th>
+                  <th>DUE DATE</th>
+                  <th>SUBTOTAL</th>
+                  <th>TAX</th>
+                  <th>TOTAL</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (inv of invoices(); track inv.id) {
+                  <tr>
+                    <td class="font-mono">{{ inv.invoiceNumber }}</td>
+                    <td>
+                      <div class="customer-info">
+                        <strong>{{ inv.customerName }}</strong>
+                        <span class="sub">{{ inv.customerEmail }}</span>
+                      </div>
+                    </td>
+                    <td>{{ inv.dueDate | date:'mediumDate' }}</td>
+                    <td>{{ inv.subTotal | currency:inv.currency }}</td>
+                    <td>{{ inv.taxAmount | currency:inv.currency }}</td>
+                    <td class="font-bold">{{ inv.totalAmount | currency:inv.currency }}</td>
+                    <td>
+                      <!-- Shared UI Badge Component -->
+                      <smart-erp-badge [variant]="getStatusVariant(inv.status)">
+                        {{ getStatusLabel(inv.status) }}
+                      </smart-erp-badge>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="empty-state">
+                      @if (isDataLoading()) {
+                        <span>Loading tenant invoices...</span>
+                      } @else {
+                        <span>No invoices registered for this tenant context. Ask the Smart ERP Copilot to draft one!</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+
+      <!-- Tab Content: Inventory -->
+      @if (activeTab() === 'inventory') {
+        <section class="card data-card">
+          <div class="card-header">
+            <div>
+              <h3>Inventory & Warehouse Stock</h3>
+              <span class="card-caption">Tracked with automated reorder threshold triggers</span>
+            </div>
+            <button class="secondary-btn" (click)="refreshData()">Refresh</button>
+          </div>
+
+          <div class="table-container">
+            <table class="erp-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>ITEM NAME</th>
+                  <th>DESCRIPTION</th>
+                  <th>UNIT PRICE</th>
+                  <th>STOCK LEVEL</th>
+                  <th>THRESHOLD</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of inventory(); track item.id) {
+                  <tr>
+                    <td class="font-mono">{{ item.sku }}</td>
+                    <td><strong>{{ item.name }}</strong></td>
+                    <td class="text-muted">{{ item.description }}</td>
+                    <td>{{ item.unitPrice | currency }}</td>
+                    <td>
+                      <span [class.text-danger]="item.stockQuantity <= item.reorderThreshold">
+                        {{ item.stockQuantity }} units
+                      </span>
+                    </td>
+                    <td>{{ item.reorderThreshold }} units</td>
+                    <td>
+                      @if (item.stockQuantity <= item.reorderThreshold) {
+                        <smart-erp-badge variant="danger">LOW STOCK</smart-erp-badge>
+                      } @else {
+                        <smart-erp-badge variant="success">IN STOCK</smart-erp-badge>
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" class="empty-state">
+                      @if (isDataLoading()) {
+                        <span>Loading inventory items...</span>
+                      } @else {
+                        <span>No inventory items registered in this tenant context.</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    </main>
+
+    <!-- Right Sidebar / AI Copilot Drawer -->
+    <aside class="erp-agent-sidebar">
+      <!-- Shared Workspace Feature Chat Library -->
+      <smart-erp-agent-chat />
+    </aside>
+  </div>
+</div>
