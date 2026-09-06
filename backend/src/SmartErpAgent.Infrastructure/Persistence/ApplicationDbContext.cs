@@ -21,6 +21,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceLineItem> InvoiceLineItems => Set<InvoiceLineItem>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderLineItem> PurchaseOrderLineItems => Set<PurchaseOrderLineItem>();
 
     public Guid? CurrentTenantId => _tenantContext.CurrentTenantId;
 
@@ -40,6 +42,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         modelBuilder.Entity<InvoiceLineItem>()
             .HasQueryFilter(e => !e.IsDeleted && (CurrentTenantId == null || e.Invoice.TenantId == CurrentTenantId));
+
+        modelBuilder.Entity<PurchaseOrder>()
+            .HasQueryFilter(e => !e.IsDeleted && (CurrentTenantId == null || e.TenantId == CurrentTenantId));
+
+        modelBuilder.Entity<PurchaseOrderLineItem>()
+            .HasQueryFilter(e => !e.IsDeleted && (CurrentTenantId == null || e.TenantId == CurrentTenantId));
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

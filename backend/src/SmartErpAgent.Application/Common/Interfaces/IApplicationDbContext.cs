@@ -9,6 +9,8 @@ public interface IApplicationDbContext
     DbSet<Invoice> Invoices { get; }
     DbSet<InvoiceLineItem> InvoiceLineItems { get; }
     DbSet<InventoryItem> InventoryItems { get; }
+    DbSet<PurchaseOrder> PurchaseOrders { get; }
+    DbSet<PurchaseOrderLineItem> PurchaseOrderLineItems { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

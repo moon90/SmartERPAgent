@@ -11,4 +11,5 @@ public class Tenant : BaseEntity
     // Navigation properties
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public ICollection<InventoryItem> InventoryItems { get; set; } = new List<InventoryItem>();
+    public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = new List<PurchaseOrder>();
 }

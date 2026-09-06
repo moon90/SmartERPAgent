@@ -20,6 +20,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
     private readonly InventoryAgentPlugin _inventoryPlugin;
     private readonly InvoiceExtractorPlugin? _invoiceExtractorPlugin;
     private readonly ReportingAgentPlugin? _reportingPlugin;
+    private readonly PurchaseOrderAgentPlugin? _purchaseOrderPlugin;
     private readonly IHubContext<AgentHub>? _hubContext;
 
     public SemanticKernelAgentOrchestrator(
@@ -29,7 +30,8 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         InventoryAgentPlugin inventoryPlugin,
         IHubContext<AgentHub>? hubContext = null,
         InvoiceExtractorPlugin? invoiceExtractorPlugin = null,
-        ReportingAgentPlugin? reportingPlugin = null)
+        ReportingAgentPlugin? reportingPlugin = null,
+        PurchaseOrderAgentPlugin? purchaseOrderPlugin = null)
     {
         _configuration = configuration;
         _logger = logger;
@@ -38,6 +40,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         _hubContext = hubContext;
         _invoiceExtractorPlugin = invoiceExtractorPlugin;
         _reportingPlugin = reportingPlugin;
+        _purchaseOrderPlugin = purchaseOrderPlugin;
     }
 
     public async Task<string> ExecutePromptAsync(string prompt, CancellationToken cancellationToken = default)
@@ -67,47 +70,47 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         {
             kernelBuilder.Plugins.AddFromObject(_reportingPlugin, "ReportingAgentPlugin");
         }
+        if (_purchaseOrderPlugin != null)
+        {
+            kernelBuilder.Plugins.AddFromObject(_purchaseOrderPlugin, "PurchaseOrderAgentPlugin");
+        }
 
         var openAiKey = _configuration["SemanticKernel:ApiKey"] ?? _configuration["OpenAI:ApiKey"];
         var modelId = _configuration["SemanticKernel:ModelId"] ?? _configuration["OpenAI:ModelId"] ?? "gpt-4o";
 
         var executedActions = new List<AgentActionExecutedDto>();
 
-        if (!string.IsNullOrWhiteSpace(openAiKey) && openAiKey != "YOUR_OPENAI_API_KEY")
+        if (!string.IsNullOrWhiteSpace(openAiKey))
         {
             try
             {
-                await StreamThoughtAsync("Initializing Semantic Kernel chat completion planner...", cancellationToken);
+                await StreamThoughtAsync("Connecting to OpenAI Semantic Kernel dynamic function planner...", cancellationToken);
+
                 kernelBuilder.AddOpenAIChatCompletion(modelId, openAiKey);
                 var kernel = kernelBuilder.Build();
 
-                var plannerOptions = new FunctionCallingStepwisePlannerOptions
-                {
-                    MaxIterations = 10,
-                    MaxTokens = 4000
-                };
-
-                var planner = new FunctionCallingStepwisePlanner(plannerOptions);
-                await StreamThoughtAsync("Executing stepwise tool planner iterations...", cancellationToken);
+#pragma warning disable SKEXP0060
+                var planner = new FunctionCallingStepwisePlanner();
                 var planResult = await planner.ExecuteAsync(kernel, request.Prompt, cancellationToken: cancellationToken);
+#pragma warning restore SKEXP0060
 
-                await StreamThoughtAsync("Synthesizing final generative answer...", cancellationToken);
+                await StreamThoughtAsync("Successfully synthesized response via AI function calling.", cancellationToken);
 
                 return new AgentResponseDto(
-                    Content: planResult.FinalAnswer ?? "Agent completed execution without output text.",
-                    ThoughtProcess: "Executed using Microsoft Semantic Kernel FunctionCallingStepwisePlanner.",
+                    Content: planResult.FinalAnswer ?? "Execution completed.",
+                    ThoughtProcess: "Executed autonomously via Semantic Kernel Stepwise Planner.",
                     ExecutedActions: executedActions,
                     Status: "Success"
                 );
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "FunctionCallingStepwisePlanner encountered an issue. Falling back to local domain handler.");
-                await StreamThoughtAsync("Falling back to enterprise domain plugin execution pipeline...", cancellationToken);
+                _logger.LogWarning(ex, "OpenAI Kernel planning encountered an error. Falling back to local deterministic rule routing.");
+                await StreamThoughtAsync($"Dynamic reasoning unavailable ({ex.Message}). Engaging deterministic ERP rule routing...", cancellationToken);
             }
         }
 
-        // Fallback rule-based execution for local testing and offline execution without cloud LLM
+        // Deterministic Fallback Routing Engine
         var promptText = request.Prompt.Trim();
         var promptLower = promptText.ToLowerInvariant();
         string responseText;
@@ -162,7 +165,63 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
             await StreamThoughtAsync($"Retrieved financial summary: {count} invoices issued with total revenue of {currency} ${totalRev:N2}.", cancellationToken);
             responseText = $"[Executive Financial Summary ({days} Days)]\nTotal Revenue: {currency} ${totalRev:N2} across {count} issued invoices.\nDetails:\n{actionResult}";
         }
-        // 3. Check for ExtractInvoiceDetailsAsync prompt (e.g. "process an invoice", "read this email", "extract invoice details")
+        // 3. Check for Restocking / Purchase Order Generation prompt
+        else if (_purchaseOrderPlugin != null &&
+            (promptLower.Contains("purchase order") || promptLower.Contains("replenish") || promptLower.Contains("restock") || promptLower.Contains("order stock")) &&
+            (promptLower.Contains("draft") || promptLower.Contains("generate") || promptLower.Contains("create") || promptLower.Contains("po")))
+        {
+            await StreamThoughtAsync("Analyzing depleted inventory and calculating replenishment quantities via PurchaseOrderAgentPlugin...", cancellationToken);
+            actionResult = await _purchaseOrderPlugin.CreateDraftPurchaseOrderAsync(null, cancellationToken);
+
+            executedActions.Add(new AgentActionExecutedDto(
+                PluginName: "PurchaseOrderAgentPlugin",
+                FunctionName: "CreateDraftPurchaseOrderAsync",
+                ArgumentsJson: JsonSerializer.Serialize(new { targetSkus = (string?)null }),
+                ResultJson: actionResult
+            ));
+
+            using var doc = JsonDocument.Parse(actionResult);
+            if (doc.RootElement.TryGetProperty("Success", out var successProp) && successProp.GetBoolean())
+            {
+                var poNum = doc.RootElement.GetProperty("OrderNumber").GetString();
+                var total = doc.RootElement.GetProperty("TotalAmount").GetDecimal();
+                var itemCount = doc.RootElement.GetProperty("LineItemCount").GetInt32();
+                var supplier = doc.RootElement.GetProperty("SupplierName").GetString();
+
+                await StreamThoughtAsync($"Persisted draft purchase order '{poNum}' with {itemCount} line items totaling ${total:N2}.", cancellationToken);
+                responseText = $"[Smart ERP Purchase Order Agent]\nDraft Purchase Order '{poNum}' generated successfully.\n" +
+                               $"Supplier: {supplier}\n" +
+                               $"Items: {itemCount} | Total Amount: ${total:N2} USD\n" +
+                               $"Status: Draft (Pending approval and supplier dispatch)";
+            }
+            else
+            {
+                var msg = doc.RootElement.TryGetProperty("Message", out var msgProp) ? msgProp.GetString() : "No items require restocking.";
+                responseText = $"[Smart ERP Purchase Order Agent]\n{msg}";
+            }
+        }
+        // 4. Check for Low-stock alerts / shortage detection
+        else if (_purchaseOrderPlugin != null &&
+            (promptLower.Contains("low in stock") || promptLower.Contains("which items are low") || promptLower.Contains("items are low") || promptLower.Contains("reorder alert") || promptLower.Contains("stock alert") || promptLower.Contains("low-stock")))
+        {
+            await StreamThoughtAsync("Scanning inventory safety thresholds via PurchaseOrderAgentPlugin.GetLowStockAlertsAsync...", cancellationToken);
+            actionResult = await _purchaseOrderPlugin.GetLowStockAlertsAsync(cancellationToken);
+
+            executedActions.Add(new AgentActionExecutedDto(
+                PluginName: "PurchaseOrderAgentPlugin",
+                FunctionName: "GetLowStockAlertsAsync",
+                ArgumentsJson: "{}",
+                ResultJson: actionResult
+            ));
+
+            using var doc = JsonDocument.Parse(actionResult);
+            var itemCount = doc.RootElement.GetProperty("TotalLowStockItems").GetInt32();
+            var totalCost = doc.RootElement.GetProperty("TotalEstimatedCost").GetDecimal();
+
+            await StreamThoughtAsync($"Identified {itemCount} depleted items requiring restocking (${totalCost:N2} estimated restock cost).", cancellationToken);
+            responseText = $"[Smart ERP Purchase Order Agent]\nIdentified {itemCount} low-stock items (Total estimated restock cost: ${totalCost:N2}).\nDetails:\n{actionResult}";
+        }
+        // 5. Check for ExtractInvoiceDetailsAsync prompt (e.g. "process an invoice", "read this email", "extract invoice details")
         else if (_invoiceExtractorPlugin != null && (
             Regex.IsMatch(promptText, @"(?i)(?:process\s+(?:an?\s+|this\s+)?invoice|read\s+(?:this\s+)?email|extract\s+(?:the\s+)?invoice\s+details)") ||
             (promptLower.Contains("read") && promptLower.Contains("email")) ||
@@ -187,11 +246,13 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
 
             responseText = $"[Smart ERP Agent - Invoice Extracted]\n" +
                            $"Successfully extracted invoice {invoiceDto.InvoiceNumber} for {invoiceDto.CustomerName}.\n" +
+                           $"Invoice #: {invoiceDto.InvoiceNumber}\n" +
+                           $"Customer: {invoiceDto.CustomerName} ({invoiceDto.CustomerEmail})\n" +
                            $"Issue Date: {invoiceDto.IssueDate:yyyy-MM-dd} | Due Date: {invoiceDto.DueDate:yyyy-MM-dd}\n" +
                            $"Total Amount: {invoiceDto.Currency} ${invoiceDto.TotalAmount:N2} (Subtotal: ${invoiceDto.SubTotal:N2}, Tax: ${invoiceDto.TaxAmount:N2})\n" +
                            $"Line Items ({invoiceDto.LineItems.Count}):\n{itemsSummary}";
         }
-        // 4. Check for Legacy Invoice Extraction or Staging prompt
+        // 6. Check for Legacy Invoice Extraction or Staging prompt
         else if (_invoiceExtractorPlugin != null && (promptLower.Contains("extract") || promptLower.Contains("parse") || promptLower.Contains("stage")) &&
             (promptLower.Contains("invoice") || promptLower.Contains("receipt") || promptLower.Contains("bill") || promptLower.Contains("items:")))
         {
@@ -234,7 +295,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
                 responseText = $"[Smart ERP Agent]\nExtracted invoice data:\n{correlatedJson}";
             }
         }
-        // 4. Check if inquiring about stock for a SKU
+        // 7. Check if inquiring about stock for a SKU
         else if (Regex.IsMatch(promptText, @"(?i)(?:stock\s+(?:level\s+)?(?:for|of)?\s+|sku[:\s-]+)([A-Za-z0-9_-]+)") ||
                  (Regex.IsMatch(promptText, @"(?i)\b([A-Z0-9]+-[A-Z0-9]+)\b") && (promptLower.Contains("stock") || promptLower.Contains("quantity") || promptLower.Contains("have enough"))))
         {
@@ -301,7 +362,7 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
         {
             await StreamThoughtAsync("Readying Semantic Kernel plugin execution response...", cancellationToken);
             responseText = $"[Smart ERP Agent Ready]\nReceived prompt: '{request.Prompt}'. " +
-                           "Semantic Kernel orchestration is initialized with InventoryAgentPlugin, InvoiceAgentPlugin, InvoiceExtractorPlugin, and ReportingAgentPlugin. " +
+                           "Semantic Kernel orchestration is initialized with InventoryAgentPlugin, InvoiceAgentPlugin, InvoiceExtractorPlugin, ReportingAgentPlugin, and PurchaseOrderAgentPlugin. " +
                            "Configure 'OpenAI:ApiKey' or 'SemanticKernel:ApiKey' for dynamic generative reasoning.";
         }
 

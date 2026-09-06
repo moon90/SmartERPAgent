@@ -19,6 +19,7 @@ public static class AgentEngineServiceCollectionExtensions
         services.AddScoped<InventoryAgentPlugin>();
         services.AddScoped<InvoiceExtractorPlugin>();
         services.AddScoped<ReportingAgentPlugin>();
+        services.AddScoped<PurchaseOrderAgentPlugin>();
         services.AddScoped<IAgentOrchestrator, SemanticKernelAgentOrchestrator>();
 
         return services;
