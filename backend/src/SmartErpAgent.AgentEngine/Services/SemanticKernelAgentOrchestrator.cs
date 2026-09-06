@@ -162,7 +162,36 @@ public class SemanticKernelAgentOrchestrator : IAgentOrchestrator
             await StreamThoughtAsync($"Retrieved financial summary: {count} invoices issued with total revenue of {currency} ${totalRev:N2}.", cancellationToken);
             responseText = $"[Executive Financial Summary ({days} Days)]\nTotal Revenue: {currency} ${totalRev:N2} across {count} issued invoices.\nDetails:\n{actionResult}";
         }
-        // 3. Check for Invoice Extraction or Staging prompt
+        // 3. Check for ExtractInvoiceDetailsAsync prompt (e.g. "process an invoice", "read this email", "extract invoice details")
+        else if (_invoiceExtractorPlugin != null && (
+            Regex.IsMatch(promptText, @"(?i)(?:process\s+(?:an?\s+|this\s+)?invoice|read\s+(?:this\s+)?email|extract\s+(?:the\s+)?invoice\s+details)") ||
+            (promptLower.Contains("read") && promptLower.Contains("email")) ||
+            (promptLower.Contains("process") && promptLower.Contains("invoice")) ||
+            (promptLower.Contains("extract") && promptLower.Contains("invoice details"))))
+        {
+            await StreamThoughtAsync("Processing document text and extracting invoice details via InvoiceExtractorPlugin...", cancellationToken);
+            var invoiceDto = await _invoiceExtractorPlugin.ExtractInvoiceDetailsAsync(promptText, cancellationToken);
+            var invoiceJson = JsonSerializer.Serialize(invoiceDto, new JsonSerializerOptions { WriteIndented = true });
+
+            executedActions.Add(new AgentActionExecutedDto(
+                PluginName: "InvoiceExtractorPlugin",
+                FunctionName: "ExtractInvoiceDetailsAsync",
+                ArgumentsJson: JsonSerializer.Serialize(new { rawContent = promptText }),
+                ResultJson: invoiceJson
+            ));
+
+            await StreamThoughtAsync("Formatting structured invoice response...", cancellationToken);
+            var itemsSummary = invoiceDto.LineItems.Count > 0
+                ? string.Join("\n", invoiceDto.LineItems.Select(li => $"  - {li.Description}: {li.Quantity} x ${li.UnitPrice:N2} = ${li.TotalPrice:N2}"))
+                : "  (No individual line items parsed)";
+
+            responseText = $"[Smart ERP Agent - Invoice Extracted]\n" +
+                           $"Successfully extracted invoice {invoiceDto.InvoiceNumber} for {invoiceDto.CustomerName}.\n" +
+                           $"Issue Date: {invoiceDto.IssueDate:yyyy-MM-dd} | Due Date: {invoiceDto.DueDate:yyyy-MM-dd}\n" +
+                           $"Total Amount: {invoiceDto.Currency} ${invoiceDto.TotalAmount:N2} (Subtotal: ${invoiceDto.SubTotal:N2}, Tax: ${invoiceDto.TaxAmount:N2})\n" +
+                           $"Line Items ({invoiceDto.LineItems.Count}):\n{itemsSummary}";
+        }
+        // 4. Check for Legacy Invoice Extraction or Staging prompt
         else if (_invoiceExtractorPlugin != null && (promptLower.Contains("extract") || promptLower.Contains("parse") || promptLower.Contains("stage")) &&
             (promptLower.Contains("invoice") || promptLower.Contains("receipt") || promptLower.Contains("bill") || promptLower.Contains("items:")))
         {

@@ -30,6 +30,231 @@ public class InvoiceExtractorPlugin
     }
 
     /// <summary>
+    /// Extracts structured invoice details including InvoiceNumber, CustomerName, IssueDate, DueDate, TotalAmount, and line items
+    /// from unstructured text, email body, or OCR content. Returns a strongly typed InvoiceDto.
+    /// </summary>
+    [KernelFunction, Description("Extracts structured invoice details including InvoiceNumber, CustomerName, IssueDate, DueDate, TotalAmount, and line items from unstructured text, email body, or OCR content. Trigger when asked to 'process an invoice', 'read this email', or 'extract invoice details'.")]
+    public Task<InvoiceDto> ExtractInvoiceDetailsAsync(
+        [Description("Raw text content of the email or OCR invoice document to parse.")] string rawContent,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rawContent))
+        {
+            var emptyDto = new InvoiceDto(
+                Id: Guid.NewGuid(),
+                TenantId: Guid.Empty,
+                InvoiceNumber: "INV-DRAFT-UNKNOWN",
+                CustomerName: "Unknown Customer",
+                CustomerEmail: "",
+                IssueDate: DateTime.UtcNow,
+                DueDate: DateTime.UtcNow.AddDays(14),
+                SubTotal: 0m,
+                TaxAmount: 0m,
+                TotalAmount: 0m,
+                Currency: "USD",
+                Status: InvoiceStatus.Draft,
+                Notes: "Empty document text provided.",
+                LineItems: new List<InvoiceLineItemDto>()
+            );
+            return Task.FromResult(emptyDto);
+        }
+
+        // 1. Extract Invoice Number
+        string invoiceNumber;
+        var directInvMatch = Regex.Match(rawContent, @"(INV-[A-Za-z0-9_-]{3,25})", RegexOptions.IgnoreCase);
+        if (directInvMatch.Success)
+        {
+            invoiceNumber = directInvMatch.Groups[1].Value.Trim().ToUpperInvariant();
+        }
+        else
+        {
+            var invoiceMatch = Regex.Match(rawContent, @"(?i)(?:invoice\s*(?:number|no|#|code)\s*[:\s-]*|inv\s*[:\s#-]+|invoice\s*[:#]\s*)([A-Za-z0-9_-]{3,25})");
+            if (invoiceMatch.Success && !string.IsNullOrWhiteSpace(invoiceMatch.Groups[1].Value))
+            {
+                invoiceNumber = invoiceMatch.Groups[1].Value.Trim();
+                if (!invoiceNumber.StartsWith("INV-", StringComparison.OrdinalIgnoreCase))
+                {
+                    invoiceNumber = $"INV-{invoiceNumber}";
+                }
+            }
+            else
+            {
+                invoiceNumber = $"INV-DRAFT-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            }
+        }
+
+        // 2. Extract Customer / Client Name
+        string customerName = "Unknown Customer";
+        var customerMatch = Regex.Match(rawContent, @"(?i)(?:bill\s*to|customer|client|sold\s*to|attention|att)[:\s]+([^\r\n,;]+)");
+        if (customerMatch.Success)
+        {
+            customerName = customerMatch.Groups[1].Value.Trim();
+        }
+
+        // 3. Extract Customer Email
+        string customerEmail = "";
+        var emailMatch = Regex.Match(rawContent, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}");
+        if (emailMatch.Success)
+        {
+            customerEmail = emailMatch.Value.Trim();
+            if (customerName == "Unknown Customer")
+            {
+                var localPart = customerEmail.Split('@')[0];
+                if (!string.IsNullOrWhiteSpace(localPart) && !localPart.Equals("billing", StringComparison.OrdinalIgnoreCase))
+                {
+                    customerName = char.ToUpper(localPart[0]) + localPart.Substring(1);
+                }
+            }
+        }
+
+        // 4. Extract Issue Date
+        DateTime issueDate = DateTime.UtcNow;
+        var issueMatch = Regex.Match(rawContent, @"(?i)(?:issue\s*date|invoiced|date)[:\s]+([A-Za-z0-9\s,\/-]+)");
+        if (issueMatch.Success)
+        {
+            var rawDate = issueMatch.Groups[1].Value.Trim();
+            var dateSplit = Regex.Split(rawDate, @"[\r\n|]+");
+            if (dateSplit.Length > 0 && DateTime.TryParse(dateSplit[0].Trim(), out var parsedIssueDate))
+            {
+                issueDate = DateTime.SpecifyKind(parsedIssueDate, DateTimeKind.Utc);
+            }
+        }
+
+        // 5. Extract Due Date (Defaults to IssueDate + 14 days)
+        DateTime dueDate = issueDate.AddDays(14);
+        var dueMatch = Regex.Match(rawContent, @"(?i)(?:due\s*date|payment\s*due|due)[:\s]+([A-Za-z0-9\s,\/-]+)");
+        if (dueMatch.Success)
+        {
+            var rawDueDate = dueMatch.Groups[1].Value.Trim();
+            var dueSplit = Regex.Split(rawDueDate, @"[\r\n|]+");
+            if (dueSplit.Length > 0 && DateTime.TryParse(dueSplit[0].Trim(), out var parsedDueDate))
+            {
+                dueDate = DateTime.SpecifyKind(parsedDueDate, DateTimeKind.Utc);
+            }
+        }
+
+        // 6. Detect Currency
+        string currency = "USD";
+        if (rawContent.Contains("€") || Regex.IsMatch(rawContent, @"\bEUR\b", RegexOptions.IgnoreCase))
+        {
+            currency = "EUR";
+        }
+        else if (rawContent.Contains("£") || Regex.IsMatch(rawContent, @"\bGBP\b", RegexOptions.IgnoreCase))
+        {
+            currency = "GBP";
+        }
+
+        // 7. Extract Line Items
+        var lineItems = new List<InvoiceLineItemDto>();
+        var lineRegexes = new[]
+        {
+            @"(?m)^\s*(?<desc>[A-Za-z0-9\s\-_()./]+?)\s+(?<qty>\d+)\s+(?:x|@)?\s*[\$€£]?(?<price>[0-9,]+\.[0-9]{2})\s*(?:=\s*[\$€£]?(?<total>[0-9,]+\.[0-9]{2}))?$",
+            @"(?m)^-\s*(?<desc>[^:\r\n]+):\s*(?:(?<qty>\d+)\s*x\s*)?[\$€£]?(?<price>[0-9,]+\.[0-9]{2})"
+        };
+
+        foreach (var regexPattern in lineRegexes)
+        {
+            var matches = Regex.Matches(rawContent, regexPattern);
+            foreach (Match m in matches)
+            {
+                var desc = m.Groups["desc"].Value.Trim();
+                if (desc.StartsWith("total", StringComparison.OrdinalIgnoreCase) ||
+                    desc.StartsWith("subtotal", StringComparison.OrdinalIgnoreCase) ||
+                    desc.StartsWith("tax", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                int qty = 1;
+                if (m.Groups["qty"].Success && int.TryParse(m.Groups["qty"].Value, out var q) && q > 0)
+                {
+                    qty = q;
+                }
+
+                decimal unitPrice = 0m;
+                if (m.Groups["price"].Success)
+                {
+                    var cleanPrice = m.Groups["price"].Value.Replace(",", "");
+                    decimal.TryParse(cleanPrice, out unitPrice);
+                }
+
+                decimal totalPrice = qty * unitPrice;
+                if (m.Groups["total"].Success)
+                {
+                    var cleanTotal = m.Groups["total"].Value.Replace(",", "");
+                    if (decimal.TryParse(cleanTotal, out var parsedTot) && parsedTot > 0)
+                    {
+                        totalPrice = parsedTot;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(desc) && (unitPrice > 0 || totalPrice > 0))
+                {
+                    lineItems.Add(new InvoiceLineItemDto(
+                        Id: Guid.NewGuid(),
+                        InventoryItemId: null,
+                        Description: desc,
+                        Quantity: qty,
+                        UnitPrice: unitPrice,
+                        TotalPrice: totalPrice
+                    ));
+                }
+            }
+
+            if (lineItems.Count > 0) break;
+        }
+
+        // 8. Extract Explicit Total Amount
+        decimal totalAmount = 0m;
+        var totalMatch = Regex.Match(rawContent, @"(?i)(?:total\s*(?:amount)?|grand\s*total|amount\s*due|balance\s*due)[:\s]*[\$€£]?\s*([0-9,]+\.[0-9]{2}|[0-9]+)");
+        if (totalMatch.Success)
+        {
+            var rawTotalStr = totalMatch.Groups[1].Value.Replace(",", "");
+            decimal.TryParse(rawTotalStr, out totalAmount);
+        }
+
+        if (totalAmount <= 0m && lineItems.Count > 0)
+        {
+            totalAmount = lineItems.Sum(li => li.TotalPrice);
+        }
+
+        if (lineItems.Count == 0 && totalAmount > 0m)
+        {
+            lineItems.Add(new InvoiceLineItemDto(
+                Id: Guid.NewGuid(),
+                InventoryItemId: null,
+                Description: "General Invoiced Goods / Services",
+                Quantity: 1,
+                UnitPrice: totalAmount,
+                TotalPrice: totalAmount
+            ));
+        }
+
+        decimal subTotal = lineItems.Count > 0 ? lineItems.Sum(li => li.TotalPrice) : totalAmount;
+        decimal taxAmount = totalAmount > subTotal ? (totalAmount - subTotal) : 0m;
+
+        var invoiceDto = new InvoiceDto(
+            Id: Guid.NewGuid(),
+            TenantId: Guid.Empty,
+            InvoiceNumber: invoiceNumber,
+            CustomerName: customerName,
+            CustomerEmail: customerEmail,
+            IssueDate: issueDate,
+            DueDate: dueDate,
+            SubTotal: subTotal,
+            TaxAmount: taxAmount,
+            TotalAmount: totalAmount,
+            Currency: currency,
+            Status: InvoiceStatus.Draft,
+            Notes: "Parsed and extracted by Smart ERP InvoiceExtractorPlugin.",
+            LineItems: lineItems
+        );
+
+        return Task.FromResult(invoiceDto);
+    }
+
+
+    /// <summary>
     /// Extracts structured invoice header fields and line items from unstructured text, email, or OCR string.
     /// </summary>
     [KernelFunction, Description("Extracts customer details, line items, quantities, and prices from unstructured invoice text or email body.")]
