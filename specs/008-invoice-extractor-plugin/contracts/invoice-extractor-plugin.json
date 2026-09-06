@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InvoiceExtractorPlugin",
+  "description": "Semantic Kernel plugin providing document intelligence and invoice extraction capabilities from raw text, emails, and OCR content.",
+  "type": "object",
+  "functions": [
+    {
+      "name": "ExtractInvoiceDetailsAsync",
+      "description": "Extracts structured invoice details including InvoiceNumber, CustomerName, IssueDate, DueDate, TotalAmount, and line items from unstructured text, email body, or OCR content.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "rawContent": {
+            "type": "string",
+            "description": "Raw text content of the email or OCR invoice document to parse."
+          }
+        },
+        "required": ["rawContent"]
+      },
+      "returns": {
+        "type": "object",
+        "description": "Strongly-typed InvoiceDto representing the parsed invoice header and line items.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "tenantId": { "type": "string", "format": "uuid" },
+          "invoiceNumber": { "type": "string" },
+          "customerName": { "type": "string" },
+          "customerEmail": { "type": "string" },
+          "issueDate": { "type": "string", "format": "date-time" },
+          "dueDate": { "type": "string", "format": "date-time" },
+          "subTotal": { "type": "number" },
+          "taxAmount": { "type": "number" },
+          "totalAmount": { "type": "number" },
+          "currency": { "type": "string" },
+          "status": { "type": "string", "enum": ["Draft", "Sent", "Paid", "Overdue", "Cancelled"] },
+          "notes": { "type": ["string", "null"] },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "format": "uuid" },
+                "inventoryItemId": { "type": ["string", "null"], "format": "uuid" },
+                "description": { "type": "string" },
+                "quantity": { "type": "integer" },
+                "unitPrice": { "type": "number" },
+                "totalPrice": { "type": "number" }
+              },
+              "required": ["id", "description", "quantity", "unitPrice", "totalPrice"]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "tenantId",
+          "invoiceNumber",
+          "customerName",
+          "issueDate",
+          "dueDate",
+          "totalAmount",
+          "currency",
+          "status",
+          "lineItems"
+        ]
+      }
+    }
+  ]
+}
